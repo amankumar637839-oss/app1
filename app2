@@ -1,0 +1,126 @@
+import streamlit as st
+import pandas as pd
+import yfinance as yf
+from statsmodels.tsa.arima.model import ARIMA
+import matplotlib.pyplot as plt
+
+# Page config
+st.set_page_config(
+    page_title="Stock Forecast App",
+    page_icon="📈",
+    layout="wide"
+)
+
+# Title
+st.title("📈 Stock Price Forecast using ARIMA")
+st.markdown("Analyze historical stock prices and predict future trends.")
+
+# Sidebar
+st.sidebar.header("Settings")
+
+ticker = st.sidebar.text_input("Stock Ticker", "AAPL")
+years = st.sidebar.slider("Historical Data (Years)", 1, 10, 5)
+forecast_days = st.sidebar.slider("Forecast Days", 30, 365, 180)
+
+# Main button
+if st.sidebar.button("Run Forecast"):
+
+    with st.spinner("Fetching stock data..."):
+
+        df = yf.download(
+            ticker,
+            period=f"{years}y",
+            interval="1d",
+            auto_adjust=True
+        )
+
+    if df.empty:
+        st.error("Invalid stock ticker or no data found.")
+    else:
+
+        close = df["Close"]
+
+        # Metrics
+        st.subheader("📊 Stock Overview")
+
+        col1, col2, col3 = st.columns(3)
+
+        latest_price = round(close.iloc[-1], 2)
+
+        with col1:
+            st.metric("Current Price", f"${latest_price}")
+
+        # ARIMA model
+        with st.spinner("Training ARIMA model..."):
+            model = ARIMA(close, order=(5, 1, 0))
+            model_fit = model.fit()
+
+            forecast = model_fit.forecast(steps=forecast_days)
+
+        predicted_price = round(forecast.iloc[-1], 2)
+        change = round(((predicted_price - latest_price) / latest_price) * 100, 2)
+
+        with col2:
+            st.metric("Predicted Price", f"${predicted_price}")
+
+        with col3:
+            st.metric("Expected Change", f"{change}%")
+
+        # Historical Chart
+        st.subheader("📉 Historical Stock Price")
+
+        fig, ax = plt.subplots(figsize=(14, 6))
+        ax.plot(close, linewidth=2)
+        ax.set_title(f"{ticker} Historical Prices")
+        ax.grid(True)
+
+        st.pyplot(fig)
+
+        # Future dates
+        future_dates = pd.date_range(
+            start=close.index[-1] + pd.Timedelta(days=1),
+            periods=forecast_days,
+            freq="D"
+        )
+
+        forecast_df = pd.DataFrame(
+            {"Forecast": forecast.values},
+            index=future_dates
+        )
+
+        # Forecast chart
+        st.subheader("🔮 Forecast Chart")
+
+        fig2, ax2 = plt.subplots(figsize=(14, 6))
+
+        ax2.plot(close[-250:], label="Historical", linewidth=2)
+        ax2.plot(forecast_df, label="Forecast", linewidth=2)
+
+        ax2.legend()
+        ax2.grid(True)
+        ax2.set_title(f"{ticker} Forecast for Next {forecast_days} Days")
+
+        st.pyplot(fig2)
+
+        # Forecast table
+        with st.expander("📅 View Forecast Data"):
+            st.dataframe(forecast_df)
+
+        # Download button
+        csv = forecast_df.to_csv().encode("utf-8")
+
+        st.download_button(
+            label="⬇ Download Forecast CSV",
+            data=csv,
+            file_name=f"{ticker}_forecast.csv",
+            mime="text/csv"
+        )
+
+        # June 2027 data
+        june_2027 = forecast_df[
+            forecast_df.index.strftime("%Y-%m") == "2027-06"
+        ]
+
+        if not june_2027.empty:
+            st.subheader("📆 June 2027 Forecast")
+            st.dataframe(june_2027)
