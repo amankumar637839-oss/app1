@@ -1,0 +1,8 @@
+requirement.txt
+streamlit
+yfinance
+pandas
+numpy
+matplotlib
+statsmodels
+scikit-learn
